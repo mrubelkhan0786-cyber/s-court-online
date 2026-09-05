@@ -91,6 +91,8 @@ function Index() {
   const turn = game.turn();
   const history = game.history({ verbose: true });
   const gameOver = game.isGameOver();
+  const timeoutColor: Color | null = whiteTime === 0 ? "w" : blackTime === 0 ? "b" : null;
+  const matchOver = gameOver || timeoutColor !== null;
   const orientation = mode === "computer" ? playerColor : "w";
   const boardRanks = orientation === "w" ? ranks : [...ranks].reverse();
   const boardFiles = orientation === "w" ? files : [...files].reverse();
@@ -102,20 +104,20 @@ function Index() {
   }, [selected, position]);
 
   useEffect(() => {
-    if (gameOver || mode === "online") return;
+    if (matchOver || mode === "online") return;
     const timer = window.setInterval(() => {
       if (game.turn() === "w") setWhiteTime((time) => Math.max(0, time - 1));
       else setBlackTime((time) => Math.max(0, time - 1));
       setTick((tick) => tick + 1);
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [gameOver, mode, position, game]);
+  }, [matchOver, mode, position, game]);
 
   useEffect(() => {
-    if (mode !== "computer" || playerColor !== "b" || turn !== "w" || gameOver) return;
+    if (mode !== "computer" || playerColor !== "b" || turn !== "w" || matchOver) return;
     const timer = window.setTimeout(() => makeComputerMove(), 550);
     return () => window.clearTimeout(timer);
-  }, [mode, playerColor, turn, gameOver, position]);
+  }, [mode, playerColor, turn, matchOver, position]);
 
   function resetGame() {
     game.reset();
@@ -149,7 +151,7 @@ function Index() {
   }
 
   function handleSquareClick(square: Square) {
-    if (gameOver || (mode === "computer" && turn !== playerColor)) return;
+    if (matchOver || (mode === "computer" && turn !== playerColor)) return;
     const piece = game.get(square);
     if (selected && legalTargets.includes(square)) {
       makeMove(selected, square);
@@ -166,10 +168,10 @@ function Index() {
     setPosition(game.fen());
     setLastMove(null);
     setSelected(null);
-    setCaptured((items) => items.slice(0, move.captured ? -1 : undefined));
+    setCaptured(game.history({ verbose: true }).filter((item) => item.captured).map((item) => item.captured as PieceSymbol));
   }
 
-  const status = game.isCheckmate() ? `${turn === "w" ? "Black" : "White"} wins by checkmate` : game.isStalemate() ? "Stalemate — draw" : game.isDraw() ? "Draw game" : game.isCheck() ? `${turn === "w" ? "White" : "Black"} is in check` : `${turn === "w" ? "White" : "Black"} to move`;
+  const status = timeoutColor ? `${timeoutColor === "w" ? "Black" : "White"} wins on time` : game.isCheckmate() ? `${turn === "w" ? "Black" : "White"} wins by checkmate` : game.isStalemate() ? "Stalemate — draw" : game.isDraw() ? "Draw game" : game.isCheck() ? `${turn === "w" ? "White" : "Black"} is in check` : `${turn === "w" ? "White" : "Black"} to move`;
   const moveRows = Array.from({ length: Math.ceil(history.length / 2) }, (_, index) => ({ number: index + 1, white: history[index * 2]?.san, black: history[index * 2 + 1]?.san }));
 
   return (
@@ -198,7 +200,7 @@ function Index() {
           <div className="stage-heading"><div><p className="eyebrow">{mode === "computer" ? "Rated practice" : mode === "local" ? "Pass & play" : "Live arena"}</p><h1>{mode === "computer" ? "Sharpen your edge" : mode === "local" ? "The board is yours" : "Ready for a challenger?"}</h1></div><Button variant="outline" size="sm" onClick={resetGame}><RotateCcw size={15} />New game</Button></div>
           <div className="players-row"><PlayerBadge color="b" name={mode === "computer" ? "Chess Bot" : "Alex Morgan"} rating={mode === "computer" ? `${difficulty} · 1,450` : "1,312"} active={turn === "b" && !gameOver} time={blackTime} /><span className="vs-label">vs</span><PlayerBadge color="w" name="Jordan Davis" rating="1,248" active={turn === "w" && !gameOver} time={whiteTime} isHuman /></div>
           <div className="board-frame"><div className="board-wrap"><div className="chess-board" aria-label="Interactive chess board">{boardRanks.flatMap((rank) => boardFiles.map((file) => { const square = `${file}${rank}` as Square; const piece = game.get(square); const dark = (files.indexOf(file) + rank) % 2 === 1; const isSelected = selected === square; const isLast = lastMove?.from === square || lastMove?.to === square; const isTarget = legalTargets.includes(square); return <Button key={square} variant="ghost" size="icon" className={`chess-square ${dark ? "square-dark" : "square-light"} ${isSelected ? "square-selected" : ""} ${isLast ? "square-last" : ""} ${isTarget ? "square-target" : ""}`} onClick={() => handleSquareClick(square)} aria-label={`${square}${piece ? ` ${piece.color === "w" ? "white" : "black"} ${piece.type}` : " empty"}`}>{piece ? <span className={`piece piece-${piece.color}`}>{pieceGlyphs[piece.color][piece.type]}</span> : null}{isTarget && !piece ? <span className="move-dot" /> : null}{isTarget && piece ? <span className="capture-ring" /> : null}{file === boardFiles[0] ? <span className="rank-label">{rank}</span> : null}{rank === (orientation === "w" ? 1 : 8) ? <span className="file-label">{file}</span> : null}</Button>; }))}</div></div></div>
-          <div className="game-status"><span className={game.isCheck() ? "status-alert" : "status-live"} />{status}{game.isCheckmate() ? <span className="status-result">Game over</span> : null}</div>
+          <div className="game-status"><span className={game.isCheck() || timeoutColor ? "status-alert" : "status-live"} />{status}{matchOver ? <span className="status-result">Game over</span> : null}</div>
           <div className="under-board-actions"><Button variant="outline" size="sm" onClick={() => setSoundOn(!soundOn)}>{soundOn ? <Volume2 size={15} /> : <MicOff size={15} />}{soundOn ? "Sound on" : "Muted"}</Button><Button variant="outline" size="sm" disabled={mode !== "local"} onClick={undoMove}><RotateCcw size={15} />Undo move</Button><Button variant="outline" size="sm" onClick={() => setOnlineNotice("Draw offer sent to your opponent")}>Offer draw</Button><Button variant="outline" size="sm" onClick={() => setOnlineNotice("You resigned this game")}><Flag size={15} />Resign</Button></div>
         </section>
 
